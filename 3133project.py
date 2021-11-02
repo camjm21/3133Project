@@ -1,6 +1,7 @@
 
 from gurobipy import *
 import pandas as pd
+import numpy as np
 # Create the model
 m = Model("project")
 
@@ -32,6 +33,7 @@ species = sData.iloc[:, 0].tolist()
 
 #Get all parameters and turn to floats if needed
 ahAge = sData.iloc[:, 1].tolist()
+ahAgeDF = pd.DataFrame(ahAge, index = species)
 
 cFood = sData.iloc[:, 2].tolist()
 cFood = [float(i) for i in cFood]
@@ -90,6 +92,26 @@ investmentsDF = pd.DataFrame(investments, index = facilities)
 
 #Get problem data
 aData = pd.read_excel("/Users/cameronmoore/Downloads/zoo data.xlsx", sheet_name = "Animals", header = 0)
+zero_data = np.zeros(shape=(len(species),len(maturities)))
+aCount = pd.DataFrame(zero_data, index = species, columns=maturities)
+
+aData = aData.iloc[:, 1:3]
+ages = []
+for i in range(0, len(aData.index)):
+    a = aData.iloc[i].tolist()
+    ages.append(a)
+
+
+for i in ages:
+    if i[1] < float(ahAgeDF.loc[i[0]]):
+        aCount.loc[i[0], "Child"] = aCount.loc[i[0], "Child"] + 1
+    else:
+        aCount.loc[i[0], "Adult"] = aCount.loc[i[0], "Adult"] + 1
+
+aCount["Total"] = aCount.sum(axis = 1)
+aCount.loc["Totals", :] = aCount.sum(axis = 0)
+#print(aCount)
+#aCount now has number of children and adults per species
 
 
 
@@ -98,17 +120,17 @@ x = m.addVars(species, maturities, foods)
 y = m.addVars(facilities)
 
 #Make objective function
-
-
+#(aCount.loc[i, j] / (90 * foodDF.loc[i, j])) * quicksum(wvDF.loc[i, k] * x[i, j, k] for k in foods)
+m.setObjective(quicksum((aCount.loc[i, j] / (90 * foodDF.loc[i, j])) * quicksum(wvDF.loc[i, k] * x[i, j, k] for k in foods) for j in maturities for i in species) / aCount.loc["Totals", "Total"], GRB.MAXIMIZE)
 
 #Add Constraints
 m.addConstrs(y[a] <= mqai for a in facilities)
 m.addConstrs(quicksum(x[i, j, k] for k in foods) == foodDF.loc[i, j] for i in species for j in maturities)
-m.addConstrs((quicksum(wvDF.loc[i, k] * x[i, "Child", k] for k in foods)/foodDF.loc[i, "Child"]) == (quicksum(wvDF.loc[i, k] * x[i, "Adult", k] for k in foods)/foodDF.loc[i, "Adult"]) for i in species)
+m.addConstrs((quicksum(wvDF.loc[i, k] * x[i, "Child", k] for k in foods) / foodDF.loc[i, "Child"]) == (quicksum(wvDF.loc[i, k] * x[i, "Adult", k] for k in foods)/foodDF.loc[i, "Adult"]) for i in species)
 m.addConstr(aqr + (3*float(ring)/10000) * quicksum(y[a] * investmentsDF.loc[a, 0] for a in facilities) >= (1 + mpm) * (aqc + quicksum(y[a] for a in facilities) + quicksum((costDF.loc[i, k]/10) * quicksum(x[i, j, k] for j in maturities) for k in foods for i in species)))
 
 
-
+m.optimize()
 
 
 #print(investmentsDF)
