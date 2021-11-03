@@ -121,13 +121,13 @@ y = m.addVars(facilities)
 
 #Make objective function
 #(aCount.loc[i, j] / (90 * foodDF.loc[i, j])) * quicksum(wvDF.loc[i, k] * x[i, j, k] for k in foods)
-m.setObjective(quicksum((aCount.loc[i, j] / (90 * foodDF.loc[i, j])) * quicksum(wvDF.loc[i, k] * x[i, j, k] for k in foods) for j in maturities for i in species) / aCount.loc["Totals", "Total"], GRB.MAXIMIZE)
+m.setObjective(quicksum((aCount.loc[i, j] / (foodDF.loc[i, j])) * quicksum(wvDF.loc[i, k] * x[i, j, k] for k in foods) for j in maturities for i in species) / aCount.loc["Totals", "Total"], GRB.MAXIMIZE)
 
 #Add Constraints
 m.addConstrs(y[a] <= mqai for a in facilities)
 m.addConstrs(quicksum(x[i, j, k] for k in foods) == foodDF.loc[i, j] for i in species for j in maturities)
 m.addConstrs((quicksum(wvDF.loc[i, k] * x[i, "Child", k] for k in foods) / foodDF.loc[i, "Child"]) == (quicksum(wvDF.loc[i, k] * x[i, "Adult", k] for k in foods)/foodDF.loc[i, "Adult"]) for i in species)
-m.addConstr(aqr + (3*float(ring)/10000) * quicksum(y[a] * investmentsDF.loc[a, 0] for a in facilities) >= (1 + mpm) * (aqc + quicksum(y[a] for a in facilities) + quicksum((costDF.loc[i, k]/10) * quicksum(x[i, j, k] for j in maturities) for k in foods for i in species)))
+m.addConstr(aqr + (3*float(ring)/10000) * quicksum(y[a] * investmentsDF.loc[a, 0] for a in facilities) >= (1 + mpm) * (aqc + quicksum(y[a] for a in facilities) + quicksum((9 * costDF.loc[i, k]) * quicksum(x[i, j, k] for j in maturities) for k in foods for i in species)))
 
 
 m.optimize()
