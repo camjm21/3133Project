@@ -110,27 +110,35 @@ for i in ages:
 
 aCount["Total"] = aCount.sum(axis = 1)
 aCount.loc["Totals", :] = aCount.sum(axis = 0)
-#print(aCount)
 #aCount now has number of children and adults per species
 
 
-
 # Make decision variables
-x = m.addVars(species, maturities, foods)
-y = m.addVars(facilities)
+x = m.addVars(species, maturities, foods, name = 'x')
+y = m.addVars(facilities, name = 'y')
 
 #Make objective function
-#(aCount.loc[i, j] / (90 * foodDF.loc[i, j])) * quicksum(wvDF.loc[i, k] * x[i, j, k] for k in foods)
 m.setObjective(quicksum((aCount.loc[i, j] / (foodDF.loc[i, j])) * quicksum(wvDF.loc[i, k] * x[i, j, k] for k in foods) for j in maturities for i in species) / aCount.loc["Totals", "Total"], GRB.MAXIMIZE)
 
 #Add Constraints
 m.addConstrs(y[a] <= mqai for a in facilities)
-m.addConstrs(quicksum(x[i, j, k] for k in foods) == foodDF.loc[i, j] for i in species for j in maturities)
+
+for i in species:
+    for j in maturities:
+        if (aCount.loc[i, "Child"] + aCount.loc[i, "Adult"]) > 0:
+            m.addConstr(quicksum(x[i, j, k] for k in foods) == foodDF.loc[i, j])
+
 m.addConstrs((quicksum(wvDF.loc[i, k] * x[i, "Child", k] for k in foods) / foodDF.loc[i, "Child"]) == (quicksum(wvDF.loc[i, k] * x[i, "Adult", k] for k in foods)/foodDF.loc[i, "Adult"]) for i in species)
 m.addConstr(aqr + (3*float(ring)/10000) * quicksum(y[a] * investmentsDF.loc[a, 0] for a in facilities) >= (1 + mpm) * (aqc + quicksum(y[a] for a in facilities) + quicksum((9 * costDF.loc[i, k]) * quicksum(x[i, j, k] for j in maturities) for k in foods for i in species)))
 
-
+#Solve the LP
 m.optimize()
 
+#Look at decision variables
+for v in m.getVars():
+    print("%s %g" % (v.varName, v.x))
 
-#print(investmentsDF)
+m.write("3133output.lp")
+
+#Decision variables make sense!
+
