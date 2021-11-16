@@ -126,6 +126,7 @@ for index, row in aCount.iterrows():
         speciesNotInReserve.append(index)
     else:
         speciesInReserve.append(index)
+del speciesInReserve[-1]
 
 inReserveList = []
 for i in species:
