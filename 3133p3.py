@@ -4,29 +4,35 @@ import numpy as np
 # Create the model
 m = Model("project")
 
-#Read in Species data
+#Read in data
 sData = pd.read_excel("/Users/cameronmoore/Downloads/zoo data.xlsx", sheet_name = "Species Data", header = 0)
+fData = pd.read_excel("/Users/cameronmoore/Downloads/zoo data.xlsx", sheet_name = "Attractions", header = 0)
 
-
-
-#Get Food types index
+#Make index data
 col = list(sData.columns)
 foods = []
 for i in col:
     if "Food" in i:
         foods.append(i)
-foods.pop(0)
 
-# Get maturity levels index
 maturities = []
 r =sData.iloc[0].tolist()
 r = r[2:4]
+
+sData = sData.iloc[1:,:]
+
+
+#Make indices
+#species
+species = sData.iloc[:, 0].tolist()
+#maturities
 for i in r:
     maturities.append(i[0:5])
+#foods
+foods.pop(0)
+#actions
+actions = ["renovated", "retrofitted"]
 
-#Get species index
-sData = sData.iloc[1:,:]
-species = sData.iloc[:, 0].tolist()
 
 
 
@@ -69,6 +75,7 @@ costDF = pd.DataFrame(costDict, index = species)
 
 
 
+
 #Constant paramaters
 aqc = 100000
 aqr = 200000
@@ -79,7 +86,7 @@ mpm = .05
 
 
 #Get Attractions data
-fData = pd.read_excel("/Users/cameronmoore/Downloads/zoo data.xlsx", sheet_name = "Attractions", header = 0)
+
 
 
 # Get facilities index
@@ -111,6 +118,25 @@ aCount["Total"] = aCount.sum(axis = 1)
 aCount.loc["Totals", :] = aCount.sum(axis = 0)
 #aCount now has number of children and adults per species
 
+# Get indices for species in reserve and not in reserve
+speciesNotInReserve = []
+speciesInReserve = []
+for index, row in aCount.iterrows():
+    if row[0] + row[1] == 0:
+        speciesNotInReserve.append(index)
+    else:
+        speciesInReserve.append(index)
+
+inReserveList = []
+for i in species:
+    if i in speciesNotInReserve:
+        inReserveList.append(0)
+    else:
+        inReserveList.append(1)
+
+inReserveDF = pd.DataFrame(inReserveList, index = species)
+print(inReserveDF)
+
 #Have parameters equal the model specifications:
 RF = foodDF
 WV = wvDF
@@ -118,27 +144,31 @@ N = aCount
 M = investmentsDF
 C = costDF
 A = ahAgeDF
+I = inReserveDF
 
 # Make decision variables
 x = m.addVars(species, maturities, foods, name = 'X')
-y = m.addVars(facilities, name = 'D')
+d = m.addVars(facilities, name = 'D')
+y = m.addVars(species, maturities, vtype = GRB.INTEGER, name = 'Y')
+z = m.addVars(species, vtype = GRB.BINARY, name = 'Z')
+e = m.addVars(species, actions, vtype = GRB.BINARY, name = 'E')
 
 #Make objective function
 m.setObjective(quicksum(quicksum(WV.loc[i, k] * x[i, j, k] for k in foods) / RF.loc[i, j] for j in maturities for i in species) / N.loc["Totals", "Total"], GRB.MAXIMIZE)
 
 #Add Constraints
-m.addConstrs(y[a] <= mqai for a in facilities)
+m.addConstrs(d[a] <= mqai for a in facilities)
 
 m.addConstrs(quicksum(x[i, j, k] for k in foods) / RF.loc[i, j] == N.loc[i, j] for j in maturities for i in species)
 
-m.addConstr(aqr + (3*float(ring)/10000) * quicksum(y[a] * M.loc[a, 0] for a in facilities) >= (1 + mpm) * (aqc + quicksum(y[a] for a in facilities) + quicksum((9 * C.loc[i, k]) * quicksum(x[i, j, k] for j in maturities) for k in foods for i in species)))
+m.addConstr(aqr + (3*float(ring)/10000) * quicksum(d[a] * M.loc[a, 0] for a in facilities) >= (1 + mpm) * (aqc + quicksum(d[a] for a in facilities) + quicksum((9 * C.loc[i, k]) * quicksum(x[i, j, k] for j in maturities) for k in foods for i in species)))
 
 #Solve the LP
 m.optimize()
 
 #Look at decision variables
-for v in m.getVars():
-    print("%s %g" % (v.varName, v.x))
+#for v in m.getVars():
+    #print("%s %g" % (v.varName, v.x))
 
 #m.write("3133output.lp")
 
