@@ -136,6 +136,13 @@ for i in species:
 
 inReserveDF = pd.DataFrame(inReserveList, index = species)
 
+#Get index of Big Cat Species
+bigCats = []
+bigCats.append(species[4])
+bigCats.append(species[5])
+bigCats.append(species[6])
+bigCats.append(species[9])
+
 #Have parameters equal the model specifications:
 RF = foodDF
 WV = wvDF
