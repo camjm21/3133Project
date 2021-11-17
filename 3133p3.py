@@ -85,15 +85,10 @@ mpm = .05
 
 
 
-#Get Attractions data
-
-
-
-# Get facilities index
+# Get facilities index and investments parameter dataframe
 facilities = (fData.iloc[:, 0]).tolist()
 investments = (fData.iloc[:, 1]).tolist()
 investmentsDF = pd.DataFrame(investments, index = facilities)
-
 
 
 #Get problem data
@@ -101,6 +96,7 @@ aData = pd.read_excel("/Users/cameronmoore/Downloads/zoo data.xlsx", sheet_name 
 zero_data = np.zeros(shape=(len(species),len(maturities)))
 aCount = pd.DataFrame(zero_data, index = species, columns=maturities)
 
+#set up the count of each species and maturity
 aData = aData.iloc[:, 1:3]
 ages = []
 for i in range(0, len(aData.index)):
@@ -132,9 +128,9 @@ del speciesInReserve[-1]
 inReserveList = []
 for i in species:
     if i in speciesNotInReserve:
-        inReserveList.append(0)
-    else:
         inReserveList.append(1)
+    else:
+        inReserveList.append(0)
 
 inReserveDF = pd.DataFrame(inReserveList, index = species)
 
@@ -144,6 +140,14 @@ bigCats.append(species[4])
 bigCats.append(species[5])
 bigCats.append(species[6])
 bigCats.append(species[9])
+
+#get index for non-Big Cat species
+nonBigCats = []
+for i in species:
+    if i in bigCats:
+        pass
+    else:
+        nonBigCats.append(i)
 
 #Have parameters equal the model specifications:
 RF = foodDF
@@ -163,29 +167,33 @@ z = m.addVars(species, vtype = GRB.BINARY, name = 'Z')
 e = m.addVars(species, actions, vtype = GRB.BINARY, name = 'E')
 
 #Make objective function
-m.setObjective(quicksum(quicksum(WV.loc[i, k] * x[i, j, k] for k in foods) / RF.loc[i, j] for j in maturities for i in species) / N.loc["Totals", "Total"], GRB.MAXIMIZE)
+m.setObjective(quicksum(quicksum(WV.loc[i, k] * x[i, j, k] for k in foods) / RF.loc[i, j] for j in maturities for i in species), GRB.MAXIMIZE)
 
 #Add original Constraints
 m.addConstrs(d[a] <= mqai for a in facilities)
-
-
 
 m.addConstr(aqr + (3*float(ring)/10000) * quicksum(d[a] * M.loc[a, 0] for a in facilities) >= (1 + mpm) * (aqc + quicksum(d[a] for a in facilities) + quicksum((9 * C.loc[i, k]) * quicksum(x[i, j, k] for j in maturities) for k in foods for i in species)))
 
 #Part 3 Constraints
 m.addConstrs(quicksum(x[i, j, k] for k in foods) / RF.loc[i, j] == N.loc[i, j] + y[i, j] for j in maturities for i in species)
 
-m.addConstrs(y[i, j] <= 5 for i in species for j in maturities)
+
+m.addConstrs(y[i, j] <= 2 for i in nonBigCats for j in maturities)
 m.addConstr(quicksum(y[i, j] for i in species for j in maturities) >= 5)
 m.addConstr(quicksum(y[i, "Child"] for i in species) == 0)
 m.addConstr(quicksum(z[i] for i in bigCats) <= 1)
+m.addConstrs(z[i] == e[i, "renovated"] for i in bigCats)
 m.addConstr(quicksum(z[i] * I.loc[i] for i in species) <= 1)
-m.addConstr(quicksum(e[i, "renovated"] for i in species) <= 2)
+m.addConstr(quicksum(e[i, "renovated"] for i in nonBigCats) <= 2)
 m.addConstrs(e[i, "retrofitted"] == z[i] * I.loc[i] for i in species)
 m.addConstrs(e[i, "retrofitted"] + e[i, "renovated"] <= 1 for i in species)
 m.addConstr(quicksum(e[i, "retrofitted"] for i in species) <= 1)
-m.addConstrs(y[i, "Adult"] <= 2*e[i, "renovated"] for i in speciesInReserve)
+m.addConstrs(e[i, "retrofitted"] + e[i, "renovated"] == z[i] for i in species)
+
+#Capacities
+m.addConstrs(y[i, "Adult"] <= 5*e[i, "renovated"] - (quicksum(N.loc[i, j] for j in maturities) *e[i, "renovated"]) for i in speciesInReserve)
 m.addConstrs(e[i, "renovated"] == 0 for i in speciesNotInReserve)
+
 m.addConstrs(y[i, "Adult"] <= 2*e[i, "retrofitted"] for i in speciesNotInReserve)
 m.addConstrs(e[i, "retrofitted"] == 0 for i in speciesInReserve)
 
@@ -195,8 +203,8 @@ m.addConstrs(e[i, "retrofitted"] == 0 for i in speciesInReserve)
 m.optimize()
 
 #Look at decision variables
-#for v in m.getVars():
-    #print("%s %g" % (v.varName, v.x))
+for v in m.getVars():
+    print("%s %g" % (v.varName, v.x))
 
 #m.write("3133output.lp")
 
